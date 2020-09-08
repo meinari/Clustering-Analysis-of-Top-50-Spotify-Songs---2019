@@ -1,0 +1,471 @@
+---
+title: "Clustering Analysis of Top 50 Spotify Songs - 2019"
+author: "Meinari"
+date: "4/17/2020"
+output:
+  html_document:
+    theme : cerulean
+    highlight : tango
+    toc : true
+    toc_depth : 2
+    toc_float :
+      collapsed : true
+    df_print : paged
+
+---
+
+
+<style>
+
+body{
+text-align : justify}
+
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+options(scipen = 9999)
+rm(list=ls())
+```
+
+![](spotify.jpg)
+
+# Introduction
+**"Without music, life would be a mistake"**, Friedrich Nietzsche  
+It is undoubted that music becomes one important thing of people nowadays as they can access music in everywhere and anytime. As one of music online platform, **Spotify** is one of popular music platform that most used by people around the world. Every year, spotify launch the 50 most popular songs by singer, genre and etc. Furthermore, in this analysis I would like to group those 50 top songs of 2019 into several category in order to see the type of the song. The data was taken from *https://www.kaggle.com/leonardopena/top50spotify2019*.
+
+
+# Read & Cleaning Data
+In this step we load the data first from our directory folder and name it as `spotify`.
+```{r}
+spotify <- read.csv("top50.csv")
+```
+
+After that we try to take a glimpse of our data structure using `str()`.
+```{r}
+str(spotify)
+```
+Variable Description :  
+* **Track.Name** : Name of the track (song titile)  
+* **Artis.Name** : Name of the artist (singer)  
+* **Genre** : The genre of the track  
+* **Beats.Per.Minute** : The tempo of the song  
+* **Energy** : The energy of the song - the higher the value, the more energetic the song  
+* **Danceability** : The higher the value, the easier it is to dance to this song  
+* **Loudness..dB..** : The higher the value, the louder the song  
+* **Liveness** : The higher the value, the more likely the song is a live recording  
+* **Valence.** : The higher the value, the more positive mood for the song  
+* **Length.** : The duration of the song  
+* **Acousticness..** : The higher the value the more acoustic the song is  
+* **Speechiness.** : The higher the value the more spoken word the song contains  
+* **Popularity** : The higher the value the more popular the song is  
+
+There is one variable `X` that unused in this analysis so we need to remove it first using library `tidyverse`. Fortunately our data is already in its appropriate format so we do not have to convert any data form.
+
+```{r}
+library(tidyverse) # for data wrangling
+spotify <- spotify %>% 
+  select(-X)
+```
+
+Then, we inspect whether there is any missing value of our observation using `colsums(is.na())`.
+```{r}
+colSums(is.na(spotify))
+```
+There is no missing data of our dataframe so we could proceed to the next step.
+
+```{r}
+library(GGally)
+ggcorr(spotify, label =T, label_size=3)
+```
+
+
+# Basic Exploratory Data Analysis
+In this step I would like to explore the data by doing several data analysis.  
+
+## What is the top 10 song on Spotify in 2019 {.tabset}
+
+```{r}
+library(plotly) # for interactive plot
+library(glue) # for glue text
+
+top10_song <- spotify %>% 
+  arrange(desc(Popularity)) %>% 
+  head(10) %>% 
+  select(c(Track.Name, Artist.Name, Genre, Popularity, Length.)) %>% 
+  mutate(mean_length = mean(Length.),
+         text = glue(
+    "Artist = {Artist.Name}
+    Genre = {Genre}"
+  ))
+
+plot_top10_song <- ggplot(data = top10_song, aes(x = reorder(Track.Name, Popularity),
+                                                 y = Popularity,
+                                                 text = text,
+                                                 label = Popularity))+
+  geom_col(aes(fill = Popularity), show.legend = F)+
+  theme_bw()+
+  coord_flip()+
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12, colour = "black"),
+        title = element_text(size = 12, colour = "black"))+
+  geom_text(aes(label = Popularity), color = "white", size = 6, fontface = "bold", position = position_stack(0.8))+
+  labs(title = "Top 10 Song on Spotify in 2019",
+       x = "Song Title",
+       y = "Popularity Rate",
+       caption = "Source : Kaggle Dataset")
+
+ggplotly(plot_top10_song, tooltip = "text")
+```
+
+**Bad Guy** sung by Billie Eilish with Genre electropop was the most popular song played on spotifiy in 2019.
+
+## What is the Top 3 Genre of 2019 Spotify top songs {.tabset}
+```{r}
+top3_genre <- spotify %>% 
+  group_by(Genre) %>% 
+  summarise(song = n()) %>% 
+  ungroup() %>% 
+  mutate(song = song/50) %>% 
+  arrange(desc(song)) %>% 
+  head(3)
+
+library(ggplot2) #to make plot
+plot_top3_genre <- ggplot(data = top3_genre, aes(x = reorder(Genre, song),
+                                                 y = song,
+                                                 label = song))+
+  geom_col(aes(fill = song), show.legend = FALSE)+
+  theme_bw()+
+  coord_flip()+
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14, colour = "black"),
+        title = element_text(size = 14, colour = "black"))+
+  geom_text(aes(label = scales::percent(song)), color = "white", size = 12, fontface = "bold", position = position_stack(0.7))+
+  labs(title = "Top 3 Genre of Spotify Most Popular Song 2019",
+       x = "Genre of Music",
+       y = "Rate of Genre",
+       caption = "Source : Kaggle Dataset")
+
+plot_top3_genre
+```
+
+Based on graph above, we know that 40% of spotify popular songs in 2019 are dominated 3 categories of Genre, in which the most popular genre is Dance Pop (16%) and followed by Pop(14%) and latin (10%). While the other category is equal or less than 4%.  
+This is a little intriguing since the most popular track in 2019 have **electropop** genre.
+
+# Selecting Variables
+Based on my business wise, we deselect several variables that probably may not suitable for this analysis, which variables that not in `numeric` format that does not related to this clasification.
+```{r}
+spotify_ppt <- spotify %>% 
+  select_if(is.numeric) %>% 
+  select(-Popularity) # this variable would not be used even integer since it does not carelated to thid clasification.
+
+glimpse(spotify_ppt)
+```
+
+## Data Preprocessing
+We need to make sure that our data is properly scaled in order to get a useful PCA. Here I would like to use `scale()` function to scale the numeric variables and store it as `spotify_scale`.
+```{r}
+spotify_scale <- scale(spotify_ppt, center = T, scale = T)
+```
+
+# K-Means Clustering
+Data clustering is common a data mining technique to create clusters of data that can be identified as "*data with some characteristics*". Since we do not have outlier from the data so we do need to remove outlier step and can proceed to the next step.
+
+## Choosing Optimum K
+
+The next step in building a K-means clustering is to find the optimum cluster number to model our data. Use the defined `kmeansTunning()` function below to find the optimum K using Elbow method. Use a maximum of `maxK` as 7 to limit the plot into 7 distinct clusters. 
+
+```{r}
+RNGkind(sample.kind = "Rounding")
+kmeansTunning <- function(data, maxK){
+  withinall <-  NULL
+  total_k <-  NULL
+  for (i in 2: maxK){
+    set.seed(101)
+    temp <- kmeans(data,i)$tot.withinss
+    withinall <- append(withinall, temp)
+    total_k <-  append(total_k,i)
+  }
+  plot(x = total_k, y = withinall, type = "o", xlab = "Number of Cluster", ylab = "Total Within")
+}
+
+kmeansTunning(spotify_scale, maxK = 7)
+```
+
+Based on the elbow plot generated above, the optimal number of cluster is **6**.  
+K-means is a clustering algorithm that groups the data based on distance. The resulting clusters are stated to be optimum if the distance between data in the same cluster is low and the distance between data from different clusters is high.
+
+## Building Cluster
+
+Once we find the optimum K from the previous section, we try to do K-means clustering from our data and store it as `spotify_cluster`. Use `set.seed(101)` to guarantee a reproducible example. Extract the cluster information from the resulting K-means object using `spotify_cluster$cluster` and add them as a new column named `cluster` to the coffee dataset.
+
+```{r}
+set.seed(101)
+spotify_cluster <- kmeans(spotify_ppt, 6)
+spotify_ppt$cluster <- spotify_cluster$cluster
+spotify_ppt$cluster <- as.factor(spotify_ppt$cluster)
+```
+
+# Principal Component Analysis
+Principal comonent analysis (PCA) is a statistical procedure that uses an orthogonal transformation to convert a set of observations of possibly correlated variables (entities of which takes on various numerical values) into a set of values of linearly uncorrelated variables called principal components. This transformation is defined in such a way that the first principal component has the largest possible variance (that is, accounts for as much of the variability in the data as possible), and each succeeding component in turn has the highest variance possible under the constraint that it is orthogonal to the preceding components. The resulting vectors (each being a linear combination of the variables and containing n observations) are an uncorrelated orthogonal basis set. PCA is sensitive to the relative scaling of the original variables.
+
+## Build Principal Component
+We have prepared the scaled data to be used for PCA. Next, we will try to generate the principal component from the `spotify_ppt`. Recall how we use `FactoMiner`library to perform PCA. Use `PCA()` function from the library to generate a PCA and store it as `pca_spotify`.  
+
+```{r}
+library(FactoMineR) # for PCA
+pca_spotify <- PCA(spotify_ppt, quali.sup =10, graph = F, scale.unit = T)
+
+# plot
+plot.PCA(pca_spotify, choix = "ind", label = "none", habillage = 10)
+```
+
+Then check the summary of the `pca_spotify`.
+```{r}
+summary(pca_spotify)
+```
+Based on the summary, in assumption if we only tolerate no more than 20% of information loss, there will **6** Principal Components (PCs) that would we use in this analysis.  
+
+Another great implementation of PCA is to visalize high dimensional data into 2 dimensional plot for various purposes, such as cluster analysis or detecting any outliers. In order to visualize the PCA, use `plot.PCA()` function to the `pca_spotify`. This will generate an individual PCA plot.
+
+```{r}
+plot.PCA(pca_spotify)
+```
+As we can see, there is no outlier in our data.  
+We can aslo create a varaible PCA plot that shows the variable loading information of the PCA  by simply add `choix = "var"`in the `plot.PCA()`. The loading information will be represented by the length of the arrow from the center of coordinates. The longer the arrow, the bigger loading information of those variables. However this may not an efficient method if we have many features. Some variable would overlap with each other, making it to see the variable names.  
+
+An alternative way to extract the loading information is by using the `dimdesc()` function to the `pca_spotify`. Store the result as `pca_dimdesc`. Inspect the loading information from the first dimension/PC by calling `pca_dimdesc$Dim.1`. Since the first dimension is the one that hold most information.
+
+```{r}
+pca_dimdesc <-  dimdesc(pca_spotify)
+
+pca_dimdesc$Dim.1
+```
+
+**Energy** and **Loudness** is the most two variables contributing to PC 1. It is very make sense 16% of total song of Top Spotify 2019 track have genre **Dance Pop**.
+
+# Combining PCA with K-Means
+```{r}
+plot.PCA(pca_spotify, choix = "var", col.ind = spotify_ppt$cluster)
+```
+
+```{r}
+library(factoextra)
+fviz_cluster(spotify_cluster,
+             data = spotify_ppt[,-10])+
+  theme_minimal()
+```
+# Goodness of Fit
+From this test we can measure how good our clustering model with 3 values :  
+* Wihtin Sum of Squares (**withinss**): distance of each observation to the centroid for each cluster.  
+* Summed Total Sum of Squares (**totss**): the distance of each observation to the global sample mean (overall data average).  
+* Between Sum of Squares (**betweenss**): centroid distance of each cluster to the global sample mean.
+
+```{r}
+spotify_cluster$withinss
+spotify_cluster$totss
+spotify_cluster$betweenss
+```
+
+The closer value of *betweenss/totss* to 1, the better the clustering. So here we inspect that value:
+```{r}
+spotify_cluster$betweenss/spotify_cluster$totss
+```
+Based on the value above, we can see that our model is fairly good in clustering the Spotify 2019 top song. 
+
+# Conclusion
+## Summarize Cluster
+```{r}
+spotify_ppt %>% 
+  group_by(cluster) %>% 
+  summarise_all("mean")
+```
+
+From seeing the graph, we know that the data has been clustered into 6 categories with their own distinct characteristics.There are 6 big groups of popular songs that people hear via spotify in 2019.
+* **Cluster 1** has high *beats per minute* and *danceability*. So we can say that cluster 1 containing the largest data of our grouping, is consisted of songs that upbeat and danceable with average length of music 167 seconds (under three minutes) which the lowest length compared to other clusters. 
+
+
+```{r}
+spotify_country <- read.csv("top50contry.csv")
+```
+
+
+```{r}
+str(spotify_country)
+```
+```{r}
+levels(spotify_country$country)
+```
+There are
+
+```{r}
+library(plotly) # for interactive plot
+library(glue) # for glue text
+
+top10_indo <- spotify_country %>%
+  filter(country == "indonesia") %>% 
+  arrange(desc(pop)) %>% 
+  head(10) %>% 
+  select(c(title, artist, top.genre, pop, dur)) %>% 
+  mutate(mean_dur = mean(dur),
+         text = glue(
+    "Artist = {artist}
+    Genre = {top.genre}"
+  ))
+
+plot_top10_indo_song <- ggplot(data = top10_indo, aes(x = reorder(title, pop),
+                                                 y = pop,
+                                                 text = text,
+                                                 label = pop))+
+  geom_col(aes(fill = pop), show.legend = F)+
+  theme_bw()+
+  coord_flip()+
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12, colour = "black"),
+        title = element_text(size = 12, colour = "black"))+
+  geom_text(aes(label = pop), color = "white", size = 6, fontface = "bold", position = position_stack(0.8))+
+  labs(title = "Top 10 Song on Spotify-2019 in Indonesia",
+       x = "Song Title",
+       y = "Popularity Rate",
+       caption = "Source : Kaggle Dataset")
+
+ggplotly(plot_top10_indo_song, tooltip = "text")
+
+```
+
+```{r}
+top_genre <- spotify %>% 
+  group_by(Genre) %>% 
+  summarise(song = n()) %>% 
+  ungroup() %>% 
+  mutate(song = song/50) %>% 
+  arrange(desc(song)) 
+
+```
+
+```{r}
+top10_usa <- spotify_country %>%
+  filter(country == "usa") %>% 
+  arrange(desc(pop)) %>% 
+  head(10) %>% 
+  select(c(title, artist, top.genre, pop, dur)) %>% 
+  mutate(mean_dur = mean(dur),
+         text = glue(
+    "Artist = {artist}
+    Genre = {top.genre}"
+  ))
+
+plot_top10_usa_song <- ggplot(data = top10_usa, aes(x = reorder(title, pop),
+                                                 y = pop,
+                                                 text = text,
+                                                 label = pop))+
+  geom_col(aes(fill = pop), show.legend = F)+
+  theme_bw()+
+  coord_flip()+
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12, colour = "black"),
+        title = element_text(size = 12, colour = "black"))+
+  geom_text(aes(label = pop), color = "white", size = 6, fontface = "bold", position = position_stack(0.8))+
+  labs(title = "Top 10 Song on Spotify-2019 in United States",
+       x = "Song Title",
+       y = "Popularity Rate",
+       caption = "Source : Kaggle Dataset")
+
+ggplotly(plot_top10_usa_song, tooltip = "text")
+
+```
+
+```{r}
+top10_japan <- spotify_country %>%
+  filter(country == "japan") %>% 
+  arrange(desc(pop)) %>% 
+  head(10) %>% 
+  select(c(title, artist, top.genre, pop, dur)) %>% 
+  mutate(mean_dur = mean(dur),
+         text = glue(
+    "Artist = {artist}
+    Genre = {top.genre}"
+  ))
+
+plot_top10_japan_song <- ggplot(data = top10_japan, aes(x = reorder(title, pop),
+                                                 y = pop,
+                                                 text = text,
+                                                 label = pop))+
+  geom_col(aes(fill = pop), show.legend = F)+
+  theme_bw()+
+  coord_flip()+
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12, colour = "black"),
+        title = element_text(size = 12, colour = "black"))+
+  geom_text(aes(label = pop), color = "white", size = 6, fontface = "bold", position = position_stack(0.8))+
+  labs(title = "Top 10 Song on Spotify-2019 in Japan",
+       x = "Song Title",
+       y = "Popularity Rate",
+       caption = "Source : Kaggle Dataset")
+
+ggplotly(plot_top10_japan_song, tooltip = "text")
+```
+
+```{r}
+top_indo <- spotify_country %>%
+  filter(country == "indonesia") %>% 
+  arrange(desc(pop)) %>% 
+  # head(10) %>% 
+  select(c(title, artist, top.genre, pop, dur)) %>% 
+  mutate(mean_dur = mean(dur),
+         text = glue(
+    "Artist = {artist}
+    Genre = {top.genre}"
+  ))
+
+plot_top_indo_song <- ggplot(data = top_indo, aes(x = reorder(title, pop),
+                                                 y = pop,
+                                                 text = text,
+                                                 label = pop))+
+  geom_col(aes(fill = pop), show.legend = F)+
+  theme_bw()+
+  coord_flip()+
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12, colour = "black"),
+        title = element_text(size = 12, colour = "black"))+
+  geom_text(aes(label = pop), color = "white", size = 6, fontface = "bold", position = position_stack(0.8))+
+  labs(title = "Top 50 Song listened on Spotify-2019 in Indonesia",
+       x = "Song Title",
+       y = "Popularity Rate",
+       caption = "Source : Kaggle Dataset")
+
+ggplotly(plot_top_indo_song, tooltip = "text")
+
+```
+```{r}
+top10_world <- spotify_country %>%
+  filter(country == "world") %>% 
+  arrange(desc(pop)) %>% 
+  head(10) %>% 
+  select(c(title, artist, top.genre, pop, dur)) %>% 
+  mutate(mean_dur = mean(dur),
+         text = glue(
+    "Artist = {artist}
+    Genre = {top.genre}"
+  ))
+
+plot_top10_world_song <- ggplot(data = top10_world, aes(x = reorder(title, pop),
+                                                 y = pop,
+                                                 text = text,
+                                                 label = pop))+
+  geom_col(aes(fill = pop), show.legend = F)+
+  theme_bw()+
+  coord_flip()+
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12, colour = "black"),
+        title = element_text(size = 12, colour = "black"))+
+  geom_text(aes(label = pop), color = "white", size = 6, fontface = "bold", position = position_stack(0.8))+
+  labs(title = "Top 10 Song on Spotify-2019 in the World",
+       x = "Song Title",
+       y = "Popularity Rate",
+       caption = "Source : Kaggle Dataset")
+
+ggplotly(plot_top10_world_song, tooltip = "text")
+```
+
